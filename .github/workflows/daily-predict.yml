@@ -1,0 +1,53 @@
+name: Daily Predict
+
+on:
+  schedule:
+    # 17:00 CET (16:00 UTC in winter, 15:00 UTC in summer DST).
+    # Run both so daylight saving never matters; predict.py is idempotent.
+    - cron: "0 15 * * *"
+    - cron: "0 16 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: daily-predict
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Restore data + model cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            cache/
+            artifacts/
+          key: nba-data-${{ github.run_id }}
+          restore-keys: |
+            nba-data-
+
+      - name: Ensure model exists (cold-start self-heal)
+        run: |
+          if [ ! -f artifacts/model.joblib ]; then
+            echo "No model found – training from scratch."
+            python -m nba_predictor.train
+          fi
+
+      - name: Send today's predictions
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+        run: python -m nba_predictor.predict --mode today

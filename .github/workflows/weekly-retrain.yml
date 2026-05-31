@@ -1,0 +1,61 @@
+name: Weekly Retrain
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # Monday 06:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: weekly-retrain
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            cache/
+            artifacts/
+          key: nba-data-${{ github.run_id }}
+          restore-keys: |
+            nba-data-
+
+      - name: Retrain
+        id: train
+        run: python -m nba_predictor.train
+
+      - name: Upload model artifact
+        if: success() && steps.train.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: model
+          path: artifacts/model.joblib
+          retention-days: 30
+
+      - name: Notify Telegram
+        if: always()
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+        run: |
+          python -c "
+          from nba_predictor.notify.telegram import send_message
+          ok = '${{ steps.train.outcome }}' == 'success'
+          send_message(('✅ Weekly retrain succeeded.' if ok else '⚠️ Weekly retrain failed – check GitHub Actions logs.'))
+          "
