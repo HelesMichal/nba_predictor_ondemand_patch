@@ -148,6 +148,12 @@ into Telegram – that's a Telegram-side feature, no extra config needed.
   append it to both `TELEGRAM_CHAT_IDS` (GitHub secret) and
   `ALLOWED_CHAT_IDS` (worker secret).
 
+GitHub repo → **Settings → Secrets and variables → Actions → New secret**:
+| `TELEGRAM_CHAT_IDS` | e.g. `12345,67890,11111` |      - 8951792524, ... 
+
+in Terminal (powershell - cloudflare-wroker):
+wrangler secret put ALLOWED_CHAT_IDS                    - 8951792524, ... 
+
 ---
 
 ## Files you can safely delete
